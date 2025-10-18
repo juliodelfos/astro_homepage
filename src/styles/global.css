@@ -1,3 +1,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Fondo y fuente global */
+body {
+    @apply bg-ink-950 text-text-base font-sans;
+}
+
+/* Tarjetas */
+.card {
+    @apply bg-ink-850 text-text-base ring-1 ring-ink-800 rounded-xl p-4 transition hover:bg-ink-800 hover:ring-accent-blue/30;
+}
+
+/* Títulos */
+h1,
+h2,
+h3 {
+    @apply text-text-base font-semibold;
+}
+
+/* Enlaces */
+a {
+    @apply text-accent-blue hover:text-accent-cyan transition-colors;
+}

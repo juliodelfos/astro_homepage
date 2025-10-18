@@ -5,11 +5,23 @@ module.exports = {
     extend: {
       colors: {
         ink: {
-          950: "#0B0F1A",
-          900: "#0F1524",
-          850: "#11182A",
-          800: "#141C30",
-          750: "#1A2440",
+          950: "#1a1b26", // bg
+          900: "#16161e",
+          850: "#24283b",
+          800: "#292e42",
+        },
+        accent: {
+          blue: "#7aa2f7",
+          cyan: "#7dcfff",
+          purple: "#bb9af7",
+          green: "#9ece6a",
+          yellow: "#e0af68",
+          red: "#f7768e",
+        },
+        text: {
+          base: "#c0caf5",
+          dim: "#a9b1d6",
+          comment: "#565f89",
         },
       },
       boxShadow: {
