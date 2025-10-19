@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
 import yaml from "js-yaml";
-
-// Desde src/pages/api/ → sube 3 niveles para llegar al root del repo: ../../../data/...
+// importa el archivo al bundle (no dependes de rutas del FS en runtime)
 import linksRaw from "../../../data/links.yaml?raw";
 
 export const GET: APIRoute = async () => {
@@ -13,7 +12,6 @@ export const GET: APIRoute = async () => {
         headers: { "Content-Type": "application/json" },
       });
     }
-
     return new Response(JSON.stringify(parsed), {
       headers: { "Content-Type": "application/json" },
     });

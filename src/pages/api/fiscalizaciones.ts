@@ -1,16 +1,19 @@
 import type { APIRoute } from "astro";
 import { createClient } from "@supabase/supabase-js";
 
+// En dev, asegura que .env se cargue a process.env (no afecta prod):
+import "dotenv/config";
+
 export const GET: APIRoute = async () => {
-  // Lee desde el entorno de *runtime* (Coolify inyecta aquí)
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_KEY;
+  // Runtime primero (Coolify/prod), fallback a build (dev/Vite)
+  const SUPABASE_URL = process.env.SUPABASE_URL ?? import.meta.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_KEY ?? import.meta.env.SUPABASE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return new Response(
       JSON.stringify({
         error:
-          "Faltan variables de entorno: SUPABASE_URL o SUPABASE_KEY (revisar Coolify).",
+          "Faltan variables SUPABASE_URL o SUPABASE_KEY (revisa Coolify y/o tu .env en dev).",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
