@@ -1,35 +1,29 @@
 import type { APIRoute } from "astro";
 import { createClient } from "@supabase/supabase-js";
 
-// En dev, si tienes .env local. (En prod no afecta)
+// En dev cargamos .env a process.env; en prod no afecta
 try {
   await import("dotenv/config");
 } catch {}
 
-/** Cabeceras útiles para depuración y evitar caché del browser/proxy */
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
   "Access-Control-Allow-Origin": "*",
 };
 
+const fromEnv = (k: string) => process.env[k] ?? (import.meta as any)?.env?.[k];
+
 export const GET: APIRoute = async () => {
-  // 1) Toma variables de runtime primero; si no, fallback a import.meta.env (dev)
-  const fromEnv = (k: string) =>
-    process.env[k] ?? (import.meta as any).env?.[k];
-
   const SUPABASE_URL = fromEnv("SUPABASE_URL");
-  const SUPABASE_KEY = fromEnv("SUPABASE_KEY"); // usa ANON si solo lees
+  const SUPABASE_KEY = fromEnv("SUPABASE_KEY");
 
-  // 2) Validación de entorno
   const missing: string[] = [];
   if (!SUPABASE_URL) missing.push("SUPABASE_URL");
   if (!SUPABASE_KEY) missing.push("SUPABASE_KEY");
 
   if (missing.length) {
-    const msg = `Faltan variables: ${missing.join(
-      ", ",
-    )}. Revisa Coolify (App → Environment) y tu .env en dev.`;
+    const msg = `Faltan variables de entorno: ${missing.join(", ")}. Revisa Coolify (App → Environment) y/o tu .env en dev.`;
     console.error("[/api/fiscalizaciones] ENV ERROR:", msg);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
@@ -37,9 +31,13 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: false },
-  });
+  const supabase = createClient(
+    SUPABASE_URL as string,
+    SUPABASE_KEY as string,
+    {
+      auth: { persistSession: false },
+    },
+  );
 
   try {
     const now = new Date();
@@ -106,11 +104,7 @@ export const GET: APIRoute = async () => {
         total: monthQ.count ?? 0,
       },
       week: {
-        label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(
-          weekEnd.getTime() - 1,
-        )
-          .toISOString()
-          .slice(0, 10)}`,
+        label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(weekEnd.getTime() - 1).toISOString().slice(0, 10)}`,
         total: weekQ.count ?? 0,
       },
       day: {
@@ -122,9 +116,9 @@ export const GET: APIRoute = async () => {
     return new Response(JSON.stringify(payload), { headers: JSON_HEADERS });
   } catch (e: any) {
     console.error("[/api/fiscalizaciones] UNHANDLED:", e);
-    return new Response(
-      JSON.stringify({ error: e?.message ?? "Unhandled error" }),
-      { status: 500, headers: JSON_HEADERS },
-    );
+    return new Response(JSON.stringify({ error: e?.message ?? "Unhandled" }), {
+      status: 500,
+      headers: JSON_HEADERS,
+    });
   }
 };
