@@ -1,27 +1,38 @@
 import type { APIRoute } from "astro";
 import yaml from "js-yaml";
-// importa el archivo al bundle (no dependes de rutas del FS en runtime)
 import linksRaw from "../../../data/links.yaml?raw";
+
+const JSON_HEADERS = {
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store",
+  "Access-Control-Allow-Origin": "*",
+};
 
 export const GET: APIRoute = async () => {
   try {
-    const parsed = yaml.load(linksRaw);
-    if (!parsed || typeof parsed !== "object") {
-      return new Response(JSON.stringify({ error: "links.yaml inválido" }), {
+    if (!linksRaw) {
+      const msg = "links.yaml no fue incluido en el bundle (ruta ?raw).";
+      console.error("[/api/links] BUNDLE ERROR:", msg);
+      return new Response(JSON.stringify({ error: msg }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
       });
     }
-    return new Response(JSON.stringify(parsed), {
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (e: any) {
-    return new Response(
-      JSON.stringify({ error: e?.message || "Error leyendo YAML" }),
-      {
+    const parsed = yaml.load(linksRaw);
+    if (!parsed || typeof parsed !== "object") {
+      const msg = "links.yaml inválido o vacío.";
+      console.error("[/api/links] PARSE ERROR:", msg);
+      return new Response(JSON.stringify({ error: msg }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+        headers: JSON_HEADERS,
+      });
+    }
+    return new Response(JSON.stringify(parsed), { headers: JSON_HEADERS });
+  } catch (e: any) {
+    console.error("[/api/links] UNHANDLED:", e);
+    return new Response(JSON.stringify({ error: e?.message ?? "Unhandled" }), {
+      status: 500,
+      headers: JSON_HEADERS,
+    });
   }
 };
