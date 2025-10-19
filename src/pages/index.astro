@@ -1,10 +1,16 @@
 ---
-/** index.astro — Astro 5 + Tailwind
- * - SSR: en PROD llamamos a /api/* vía 127.0.0.1:PORT (sin salir a internet ni pasar por Caddy/SSL)
- * - En DEV usamos el origin de la request (Vite dev server)
- * - Muestra errores verbosos en UI y loguea en servidor
+/**
+ * index.astro — SSR sin fetch a /api/*
+ * - Lee YAML con import ?raw y js-yaml
+ * - Consulta Supabase directo en SSR (createClient)
+ * - Muestra errores claros en UI y loguea en servidor
  */
 
+import yaml from "js-yaml";
+import linksRaw from "../data/links.yaml?raw";
+import { createClient } from "@supabase/supabase-js";
+
+// Tipos
 interface LinkItem {
     title: string;
     subtitle?: string;
@@ -19,15 +25,6 @@ interface LinksData {
     groups?: LinkGroup[];
 }
 
-const isProd = import.meta.env.PROD === true;
-const port = (isProd ? (process.env.PORT ?? "3000") : "") as string;
-
-// En producción: pega directo al propio contenedor (evita DNS/HTTPS).
-// En dev: usa el origin real de la request.
-const baseOrigin = isProd
-    ? `http://127.0.0.1:${port}`
-    : new URL(Astro.request.url).origin;
-
 let links: LinksData = { title: "Accesos rápidos", groups: [] };
 let stats = {
     month: { label: "", total: 0 },
@@ -39,55 +36,126 @@ let statsOk = false;
 let linksErr = "";
 let statsErr = "";
 
-// Helper SSR para hacer fetch con logs y errores explícitos
-async function loadJSON(path: string) {
-    const url = new URL(path, baseOrigin).toString();
-    try {
-        const res = await fetch(url, {
-            method: "GET",
-            headers: { Accept: "application/json" },
-            // evita caches en proxy/navegador
-            cache: "no-store",
-        });
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            const msg = `HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 300)}`;
-            console.error("[index] Fetch not OK:", url, msg);
-            return { __error: msg };
-        }
-        return await res.json();
-    } catch (err: any) {
-        const msg = String(err?.message ?? err);
-        console.error("[index] Fetch error:", url, msg);
-        return { __error: msg };
+// Cargar variables de entorno (en dev es útil; en prod no afecta)
+try {
+    await import("dotenv/config");
+} catch {}
+
+// Helper env (primero runtime, fallback a import.meta.env)
+const fromEnv = (k: string) => process.env[k] ?? (import.meta as any)?.env?.[k];
+
+// 1) LINKS: YAML embebido (sin FS y sin fetch)
+try {
+    if (!linksRaw) {
+        throw new Error("links.yaml no fue incluido en el bundle (?raw)");
     }
+    const parsed = yaml.load(linksRaw as string);
+    if (!parsed || typeof parsed !== "object") {
+        throw new Error("links.yaml inválido o vacío");
+    }
+    links = parsed as LinksData;
+    linksOk = true;
+} catch (e: any) {
+    linksErr = e?.message ?? String(e);
+    console.error("[index] LINKS ERROR:", linksErr);
 }
 
+// 2) STATS: consulta Supabase directamente en SSR (sin fetch)
 try {
-    const [linksData, statsData] = await Promise.all([
-        loadJSON("/api/links"),
-        loadJSON("/api/fiscalizaciones"),
+    const SUPABASE_URL = fromEnv("SUPABASE_URL");
+    const SUPABASE_KEY = fromEnv("SUPABASE_KEY");
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        throw new Error(
+            `Faltan variables de entorno: ${!SUPABASE_URL ? "SUPABASE_URL " : ""}${!SUPABASE_KEY ? "SUPABASE_KEY" : ""}`.trim(),
+        );
+    }
+
+    const supabase = createClient(
+        SUPABASE_URL as string,
+        SUPABASE_KEY as string,
+        {
+            auth: { persistSession: false },
+        },
+    );
+
+    const now = new Date();
+
+    const dayStart = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const dayEnd = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+    );
+
+    const dow = (now.getUTCDay() + 6) % 7; // lunes=0
+    const weekStart = new Date(
+        Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() - dow,
+        ),
+    );
+    const weekEnd = new Date(
+        Date.UTC(
+            weekStart.getUTCFullYear(),
+            weekStart.getUTCMonth(),
+            weekStart.getUTCDate() + 7,
+        ),
+    );
+
+    const monthStart = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const monthEnd = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+
+    const iso = (d: Date) => d.toISOString();
+
+    const [dayQ, weekQ, monthQ] = await Promise.all([
+        supabase
+            .from("fiscalizacion")
+            .select("*", { count: "exact", head: true })
+            .gte("timestamp", iso(dayStart))
+            .lt("timestamp", iso(dayEnd)),
+        supabase
+            .from("fiscalizacion")
+            .select("*", { count: "exact", head: true })
+            .gte("timestamp", iso(weekStart))
+            .lt("timestamp", iso(weekEnd)),
+        supabase
+            .from("fiscalizacion")
+            .select("*", { count: "exact", head: true })
+            .gte("timestamp", iso(monthStart))
+            .lt("timestamp", iso(monthEnd)),
     ]);
 
-    if ((linksData as any)?.__error) {
-        linksErr = (linksData as any).__error;
-    } else {
-        links = linksData as LinksData;
-        linksOk = true;
-    }
+    const errors = [dayQ.error, weekQ.error, monthQ.error].filter(Boolean);
+    if (errors.length)
+        throw new Error(errors.map((e) => e!.message).join(" | "));
 
-    if ((statsData as any)?.__error) {
-        statsErr = (statsData as any).__error;
-    } else {
-        stats = statsData as typeof stats;
-        statsOk = true;
-    }
+    stats = {
+        month: {
+            label: now.toLocaleString("es-CL", {
+                month: "long",
+                year: "numeric",
+            }),
+            total: monthQ.count ?? 0,
+        },
+        week: {
+            label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(weekEnd.getTime() - 1).toISOString().slice(0, 10)}`,
+            total: weekQ.count ?? 0,
+        },
+        day: {
+            label: dayStart.toISOString().slice(0, 10),
+            total: dayQ.count ?? 0,
+        },
+    };
+    statsOk = true;
 } catch (e: any) {
-    // fallback por si algo explota fuera de los fetch
-    const msg = e?.message ?? String(e);
-    console.error("[index] Unhandled:", msg);
-    linksErr ||= `links error: ${msg}`;
-    statsErr ||= `stats error: ${msg}`;
+    statsErr = e?.message ?? String(e);
+    console.error("[index] STATS ERROR:", statsErr);
 }
 ---
 
@@ -109,7 +177,7 @@ try {
         style="font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;"
     >
         <main class="w-full px-4 py-6">
-            <!-- Top bar simple -->
+            <!-- Top bar -->
             <div class="mx-auto mb-6 flex max-w-[1400px] items-center gap-4">
                 <div
                     class="flex items-center gap-2 rounded-xl bg-ink-900 px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-white/5"
@@ -124,7 +192,7 @@ try {
                 </div>
             </div>
 
-            <!-- CONTENEDOR 1: KPIs -->
+            <!-- KPIs -->
             <section class="mx-auto max-w-[1400px]">
                 <header class="mb-4">
                     <h1 class="text-2xl font-semibold">
@@ -147,9 +215,8 @@ try {
                         </h3>
                         <span
                             class="rounded-full bg-ink-850 px-2 py-0.5 text-[0.72rem] leading-5 tracking-wide ring-1 ring-white/10 text-slate-300"
+                            >Base de datos</span
                         >
-                            Base de datos
-                        </span>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -218,8 +285,8 @@ try {
                     {
                         !statsOk && (
                             <p class="mt-3 text-xs text-rose-300/80">
-                                No se pudo cargar{" "}
-                                <code>/api/fiscalizaciones</code>. {statsErr}
+                                No se pudo cargar <code>Supabase</code>.{" "}
+                                {statsErr}
                             </p>
                         )
                     }
@@ -228,7 +295,7 @@ try {
 
             <div class="h-6"></div>
 
-            <!-- CONTENEDOR 2: Links desde YAML -->
+            <!-- LINKS -->
             <section class="mx-auto max-w-[1400px]">
                 <div
                     class="rounded-2xl bg-ink-900 p-4 shadow-card ring-1 ring-white/10"
@@ -239,11 +306,11 @@ try {
                         >
                             Atajos útiles
                         </h3>
-                        <span class="text-xs text-slate-400">
-                            edita en <code class="text-slate-300"
+                        <span class="text-xs text-slate-400"
+                            >edita en <code class="text-slate-300"
                                 >data/links.yaml</code
-                            >
-                        </span>
+                            ></span
+                        >
                     </div>
 
                     {
@@ -291,7 +358,7 @@ try {
                     {
                         !linksOk && (
                             <p class="mt-3 text-xs text-rose-300/80">
-                                No se pudo cargar <code>/api/links</code>.{" "}
+                                No se pudo cargar <code>links.yaml</code>.{" "}
                                 {linksErr}
                             </p>
                         )
