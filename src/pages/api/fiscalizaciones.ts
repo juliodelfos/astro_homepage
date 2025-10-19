@@ -1,10 +1,12 @@
 import type { APIRoute } from "astro";
 import { createClient } from "@supabase/supabase-js";
-// En dev, si tienes dotenv:
+
+// En dev, si tienes .env local. (En prod no afecta)
 try {
   await import("dotenv/config");
 } catch {}
 
+/** Cabeceras útiles para depuración y evitar caché del browser/proxy */
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
@@ -12,14 +14,22 @@ const JSON_HEADERS = {
 };
 
 export const GET: APIRoute = async () => {
+  // 1) Toma variables de runtime primero; si no, fallback a import.meta.env (dev)
   const fromEnv = (k: string) =>
     process.env[k] ?? (import.meta as any).env?.[k];
-  const SUPABASE_URL = fromEnv("SUPABASE_URL");
-  const SUPABASE_KEY = fromEnv("SUPABASE_KEY");
 
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    const msg =
-      `Faltan variables: ${!SUPABASE_URL ? "SUPABASE_URL " : ""}${!SUPABASE_KEY ? "SUPABASE_KEY" : ""}`.trim();
+  const SUPABASE_URL = fromEnv("SUPABASE_URL");
+  const SUPABASE_KEY = fromEnv("SUPABASE_KEY"); // usa ANON si solo lees
+
+  // 2) Validación de entorno
+  const missing: string[] = [];
+  if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+  if (!SUPABASE_KEY) missing.push("SUPABASE_KEY");
+
+  if (missing.length) {
+    const msg = `Faltan variables: ${missing.join(
+      ", ",
+    )}. Revisa Coolify (App → Environment) y tu .env en dev.`;
     console.error("[/api/fiscalizaciones] ENV ERROR:", msg);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
@@ -33,13 +43,15 @@ export const GET: APIRoute = async () => {
 
   try {
     const now = new Date();
+
     const dayStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
     const dayEnd = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
     );
-    const dow = (now.getUTCDay() + 6) % 7;
+
+    const dow = (now.getUTCDay() + 6) % 7; // lunes=0
     const weekStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow),
     );
@@ -50,12 +62,14 @@ export const GET: APIRoute = async () => {
         weekStart.getUTCDate() + 7,
       ),
     );
+
     const monthStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
     );
     const monthEnd = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
     );
+
     const iso = (d: Date) => d.toISOString();
 
     const [dayQ, weekQ, monthQ] = await Promise.all([
@@ -92,7 +106,11 @@ export const GET: APIRoute = async () => {
         total: monthQ.count ?? 0,
       },
       week: {
-        label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(weekEnd.getTime() - 1).toISOString().slice(0, 10)}`,
+        label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(
+          weekEnd.getTime() - 1,
+        )
+          .toISOString()
+          .slice(0, 10)}`,
         total: weekQ.count ?? 0,
       },
       day: {
@@ -100,12 +118,13 @@ export const GET: APIRoute = async () => {
         total: dayQ.count ?? 0,
       },
     };
+
     return new Response(JSON.stringify(payload), { headers: JSON_HEADERS });
   } catch (e: any) {
     console.error("[/api/fiscalizaciones] UNHANDLED:", e);
-    return new Response(JSON.stringify({ error: e?.message ?? "Unhandled" }), {
-      status: 500,
-      headers: JSON_HEADERS,
-    });
+    return new Response(
+      JSON.stringify({ error: e?.message ?? "Unhandled error" }),
+      { status: 500, headers: JSON_HEADERS },
+    );
   }
 };
