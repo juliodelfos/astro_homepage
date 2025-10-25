@@ -104,6 +104,12 @@ try {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
     );
     const iso = (d: Date) => d.toISOString();
+    const formatDate = (d: Date) => {
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const year = d.getUTCFullYear();
+        return `${day}-${month}-${year}`;
+    };
 
     const [dayQ, weekQ, monthQ] = await Promise.all([
         supabase
@@ -127,20 +133,20 @@ try {
     if (errors.length)
         throw new Error(errors.map((e) => e!.message).join(" | "));
 
+    const weekDisplayEnd = new Date(weekEnd.getTime() - 1);
+    const monthDisplayEnd = new Date(monthEnd.getTime() - 1);
+
     stats = {
         month: {
-            label: now.toLocaleString("es-CL", {
-                month: "long",
-                year: "numeric",
-            }),
+            label: `${formatDate(monthStart)} → ${formatDate(monthDisplayEnd)}`,
             total: monthQ.count ?? 0,
         },
         week: {
-            label: `${weekStart.toISOString().slice(0, 10)} → ${new Date(weekEnd.getTime() - 1).toISOString().slice(0, 10)}`,
+            label: `${formatDate(weekStart)} → ${formatDate(weekDisplayEnd)}`,
             total: weekQ.count ?? 0,
         },
         day: {
-            label: dayStart.toISOString().slice(0, 10),
+            label: formatDate(dayStart),
             total: dayQ.count ?? 0,
         },
     };
