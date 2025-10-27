@@ -14,7 +14,10 @@ const JSON_HEADERS = {
 
 const fromEnv = (k: string) => process.env[k] ?? (import.meta as any)?.env?.[k];
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  // Check if the client accepts SSE
+  const acceptHeader = request.headers.get('Accept');
+  const wantsSSE = acceptHeader?.includes('text/event-stream');
   const SUPABASE_URL = fromEnv("SUPABASE_URL");
   const SUPABASE_KEY = fromEnv("SUPABASE_KEY");
 
@@ -35,11 +38,26 @@ export const GET: APIRoute = async () => {
     SUPABASE_URL as string,
     SUPABASE_KEY as string,
     {
-      auth: { persistSession: false },
+      auth: { persistSession: false }
     },
   );
 
   try {
+    // Suscribirse a cambios en la tabla fiscalizacion
+    const channel = supabase.channel('fiscalizacion_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'fiscalizacion',
+        },
+        (payload) => {
+          console.log('Change received!', payload);
+        }
+      )
+      .subscribe();
+
     const now = new Date();
 
     const dayStart = new Date(
@@ -112,6 +130,31 @@ export const GET: APIRoute = async () => {
         total: dayQ.count ?? 0,
       },
     };
+
+    if (wantsSSE) {
+      const stream = new ReadableStream({
+        start(controller) {
+          // Enviar datos iniciales
+          const data = `data: ${JSON.stringify(payload)}\n\n`;
+          controller.enqueue(new TextEncoder().encode(data));
+
+          // Manejar actualizaciones en tiempo real
+          channel.on('broadcast', { event: 'update' }, (payload) => {
+            const data = `data: ${JSON.stringify(payload)}\n\n`;
+            controller.enqueue(new TextEncoder().encode(data));
+          });
+        }
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
+    }
 
     return new Response(JSON.stringify(payload), { headers: JSON_HEADERS });
   } catch (e: any) {
