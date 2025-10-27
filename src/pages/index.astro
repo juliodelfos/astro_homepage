@@ -1,11 +1,4 @@
 ---
-/**
- * index.astro — versión SSR directa (sin fetch)
- * - Carga YAML directamente desde el bundle
- * - Consulta Supabase en SSR
- * - Errores claros en UI y logs
- */
-
 import yaml from "js-yaml";
 import linksRaw from "../../data/links.yaml?raw";
 import { createClient } from "@supabase/supabase-js";
