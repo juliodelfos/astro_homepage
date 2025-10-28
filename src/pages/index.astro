@@ -23,6 +23,8 @@ let stats = {
     week: { label: "", total: 0 },
     day: { label: "", total: 0 },
 };
+let CLIENT_SUPABASE_URL = "";
+let CLIENT_SUPABASE_KEY = "";
 let linksOk = false;
 let statsOk = false;
 let linksErr = "";
@@ -54,6 +56,9 @@ try {
 try {
     const SUPABASE_URL = fromEnv("SUPABASE_URL");
     const SUPABASE_KEY = fromEnv("SUPABASE_KEY");
+    // Exponer para el cliente (se inyecta en un script más abajo)
+    CLIENT_SUPABASE_URL = SUPABASE_URL ?? "";
+    CLIENT_SUPABASE_KEY = fromEnv("SUPABASE_ANON_KEY") ?? SUPABASE_KEY ?? "";
 
     if (!SUPABASE_URL || !SUPABASE_KEY)
         throw new Error(
@@ -212,62 +217,20 @@ try {
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div
-                            class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5"
-                        >
-                            <p
-                                class="text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                Este mes
-                            </p>
-                            <p
-                                class="mt-1 text-3xl font-semibold text-slate-100"
-                            >
-                                {stats.month.total ?? 0}
-                            </p>
-                            <p
-                                class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                {stats.month.label}
-                            </p>
+                        <div class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5">
+                            <p class="text-[0.72rem] leading-5 tracking-wide text-slate-400">Este mes</p>
+                            <p id="fiscal-month-total" class="mt-1 text-3xl font-semibold text-slate-100">{stats.month.total ?? 0}</p>
+                            <p id="fiscal-month-range" class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400">{stats.month.label}</p>
                         </div>
-                        <div
-                            class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5"
-                        >
-                            <p
-                                class="text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                Esta semana
-                            </p>
-                            <p
-                                class="mt-1 text-3xl font-semibold text-slate-100"
-                            >
-                                {stats.week.total ?? 0}
-                            </p>
-                            <p
-                                class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                {stats.week.label}
-                            </p>
+                        <div class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5">
+                            <p class="text-[0.72rem] leading-5 tracking-wide text-slate-400">Esta semana</p>
+                            <p id="fiscal-week-total" class="mt-1 text-3xl font-semibold text-slate-100">{stats.week.total ?? 0}</p>
+                            <p id="fiscal-week-range" class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400">{stats.week.label}</p>
                         </div>
-                        <div
-                            class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5"
-                        >
-                            <p
-                                class="text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                Hoy
-                            </p>
-                            <p
-                                class="mt-1 text-3xl font-semibold text-slate-100"
-                            >
-                                {stats.day.total ?? 0}
-                            </p>
-                            <p
-                                class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400"
-                            >
-                                {stats.day.label}
-                            </p>
+                        <div class="rounded-xl bg-ink-850 p-4 ring-1 ring-white/5">
+                            <p class="text-[0.72rem] leading-5 tracking-wide text-slate-400">Hoy</p>
+                            <p id="fiscal-day-total" class="mt-1 text-3xl font-semibold text-slate-100">{stats.day.total ?? 0}</p>
+                            <p id="fiscal-day-range" class="mt-1 text-[0.72rem] leading-5 tracking-wide text-slate-400">{stats.day.label}</p>
                         </div>
                     </div>
 
@@ -355,5 +318,172 @@ try {
                 </div>
             </section>
         </main>
+        <div id="supabase-config" data-url={CLIENT_SUPABASE_URL} data-key={CLIENT_SUPABASE_KEY} style="display:none"></div>
+        <script type="module">
+            (async () => {
+                const cfg = document.getElementById('supabase-config');
+                const SUPABASE_URL = cfg?.dataset?.url ?? '';
+                const SUPABASE_KEY = cfg?.dataset?.key ?? '';
+                if (!SUPABASE_URL || !SUPABASE_KEY) return;
+
+                try {
+                    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+                    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+                    const iso = (d) => d.toISOString();
+
+                    const fetchCounts = async () => {
+                        try {
+                            const now = new Date();
+                            const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+                            const dayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+                            const dow = (now.getUTCDay() + 6) % 7;
+                            const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow));
+                            const weekEnd = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7));
+                            const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+                            const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+                            const [dayQ, weekQ, monthQ] = await Promise.all([
+                                supabase.from('fiscalizacion').select('*', { count: 'exact', head: true }).gte('timestamp', iso(dayStart)).lt('timestamp', iso(dayEnd)),
+                                supabase.from('fiscalizacion').select('*', { count: 'exact', head: true }).gte('timestamp', iso(weekStart)).lt('timestamp', iso(weekEnd)),
+                                supabase.from('fiscalizacion').select('*', { count: 'exact', head: true }).gte('timestamp', iso(monthStart)).lt('timestamp', iso(monthEnd)),
+                            ]);
+
+                            const errors = [dayQ.error, weekQ.error, monthQ.error].filter(Boolean);
+                            if (errors.length) {
+                                console.error('Client fetchCounts errors', errors);
+                                return;
+                            }
+
+                            const set = (id, value) => {
+                                const el = document.getElementById(id);
+                                if (el) el.textContent = String(value ?? '');
+                            };
+
+                            set('fiscal-month-total', monthQ.count ?? 0);
+                            // Recreate same label format as server-side
+                            const formatDate = (d) => {
+                                const day = String(d.getUTCDate()).padStart(2, '0');
+                                const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+                                const year = d.getUTCFullYear();
+                                return `${day}-${month}-${year}`;
+                            };
+                            const monthDisplayEnd = new Date(monthEnd.getTime() - 1);
+                            const weekDisplayEnd = new Date(weekEnd.getTime() - 1);
+
+                            set('fiscal-month-range', `${formatDate(monthStart)} → ${formatDate(monthDisplayEnd)}`);
+                            set('fiscal-week-total', weekQ.count ?? 0);
+                            set('fiscal-week-range', `${formatDate(weekStart)} → ${formatDate(weekDisplayEnd)}`);
+                            set('fiscal-day-total', dayQ.count ?? 0);
+                            set('fiscal-day-range', formatDate(dayStart));
+                        } catch (e) {
+                            console.error('fetchCounts error', e);
+                        }
+                    };
+
+                    // initial
+                    await fetchCounts();
+
+                    // subscribe to realtime changes and apply incremental diffs (avoid full refetch)
+                    const handleRealtime = (payload) => {
+                        try {
+                            // compute ranges based on current time (same logic as fetchCounts)
+                            const now = new Date();
+                            const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+                            const dayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+                            const dow = (now.getUTCDay() + 6) % 7;
+                            const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow));
+                            const weekEnd = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7));
+                            const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+                            const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+                            const parseTs = (s) => {
+                                if (!s) return null;
+                                const d = new Date(s);
+                                return Number.isNaN(d.getTime()) ? null : d;
+                            };
+
+                            const inRange = (d, start, end) => d && d >= start && d < end;
+
+                            const incEl = (id, delta) => {
+                                const el = document.getElementById(id);
+                                if (!el) return;
+                                const curr = parseInt(el.textContent ?? '0', 10) || 0;
+                                const next = Math.max(0, curr + delta);
+                                el.textContent = String(next);
+                            };
+
+                            const et = payload.eventType ?? payload.type ?? payload?.event ?? '';
+
+                            // Helper that will apply delta based on a timestamp string
+                            const applyDeltaForTs = (tsStr, delta) => {
+                                const d = parseTs(tsStr);
+                                if (!d) return;
+                                if (inRange(d, dayStart, dayEnd)) incEl('fiscal-day-total', delta);
+                                if (inRange(d, weekStart, weekEnd)) incEl('fiscal-week-total', delta);
+                                if (inRange(d, monthStart, monthEnd)) incEl('fiscal-month-total', delta);
+                            };
+
+                            if (et === 'INSERT') {
+                                applyDeltaForTs(payload.new?.timestamp, +1);
+                            } else if (et === 'DELETE') {
+                                applyDeltaForTs(payload.old?.timestamp, -1);
+                            } else if (et === 'UPDATE') {
+                                const oldTs = parseTs(payload.old?.timestamp);
+                                const newTs = parseTs(payload.new?.timestamp);
+
+                                // Day
+                                const oldInDay = inRange(oldTs, dayStart, dayEnd);
+                                const newInDay = inRange(newTs, dayStart, dayEnd);
+                                if (oldInDay && !newInDay) incEl('fiscal-day-total', -1);
+                                if (!oldInDay && newInDay) incEl('fiscal-day-total', +1);
+
+                                // Week
+                                const oldInWeek = inRange(oldTs, weekStart, weekEnd);
+                                const newInWeek = inRange(newTs, weekStart, weekEnd);
+                                if (oldInWeek && !newInWeek) incEl('fiscal-week-total', -1);
+                                if (!oldInWeek && newInWeek) incEl('fiscal-week-total', +1);
+
+                                // Month
+                                const oldInMonth = inRange(oldTs, monthStart, monthEnd);
+                                const newInMonth = inRange(newTs, monthStart, monthEnd);
+                                if (oldInMonth && !newInMonth) incEl('fiscal-month-total', -1);
+                                if (!oldInMonth && newInMonth) incEl('fiscal-month-total', +1);
+                            } else {
+                                // unknown event type: safe fallback to refetch small set after short delay
+                                setTimeout(fetchCounts, 500);
+                            }
+
+                            // Also refresh the human-readable range labels (they're cheap to recompute)
+                            const formatDate = (d) => {
+                                const day = String(d.getUTCDate()).padStart(2, '0');
+                                const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+                                const year = d.getUTCFullYear();
+                                return `${day}-${month}-${year}`;
+                            };
+                            const monthDisplayEnd = new Date(monthEnd.getTime() - 1);
+                            const weekDisplayEnd = new Date(weekEnd.getTime() - 1);
+                            const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+                            set('fiscal-month-range', `${formatDate(monthStart)} → ${formatDate(monthDisplayEnd)}`);
+                            set('fiscal-week-range', `${formatDate(weekStart)} → ${formatDate(weekDisplayEnd)}`);
+                            set('fiscal-day-range', formatDate(dayStart));
+                        } catch (e) {
+                            console.error('handleRealtime error', e);
+                            // on unexpected errors, refetch counts as fallback
+                            setTimeout(fetchCounts, 500);
+                        }
+                    };
+
+                    supabase.channel('fiscalizacion_client')
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'fiscalizacion' }, (payload) => {
+                            handleRealtime(payload);
+                        })
+                        .subscribe();
+
+                } catch (err) {
+                    console.error('Supabase client error', err);
+                }
+            })();
+        </script>
     </body>
 </html>
