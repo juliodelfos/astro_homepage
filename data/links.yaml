@@ -35,3 +35,6 @@ groups:
       - title: "ChatGPT"
         subtitle: "Asistente IA"
         url: "https://chatgpt.com/"
+      - title: "Docmost"
+        subtitle: "Apuntes"
+        url: "https://docmost.yaob.cl/home"
