@@ -1,14 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		<meta name="theme-color" content="#1976d2" />
+		<meta name="application-name" content="Yerson Olivares" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="Yerson Olivares" />
+		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>Yerson Olivares</title>
 	</head>
 	<body>
 		<slot />
+		<script is:inline>
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => {
+					navigator.serviceWorker
+						.register('/sw.js')
+						.catch((error) => {
+							console.error('Service worker registration failed:', error);
+						});
+				});
+			}
+		</script>
 	</body>
 </html>
 

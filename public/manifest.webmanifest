@@ -1,0 +1,23 @@
+{
+  "name": "Yerson Olivares",
+  "short_name": "Homepage",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b172a",
+  "theme_color": "#1976d2",
+  "description": "Página personal de Yerson Olivares.",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
