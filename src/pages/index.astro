@@ -98,8 +98,11 @@ try {
     const monthStart = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
     );
+    // Handle month overflow properly (December + 1 = next year)
+    const nextMonth = (now.getUTCMonth() + 1) % 12;
+    const nextYear = now.getUTCFullYear() + (now.getUTCMonth() === 11 ? 1 : 0);
     const monthEnd = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+        Date.UTC(nextYear, nextMonth, 1),
     );
     const iso = (d: Date) => d.toISOString();
     const formatDate = (d: Date) => {
@@ -341,7 +344,9 @@ try {
                             const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow));
                             const weekEnd = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7));
                             const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-                            const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+                            const nextMonth = (now.getUTCMonth() + 1) % 12;
+                            const nextYear = now.getUTCFullYear() + (now.getUTCMonth() === 11 ? 1 : 0);
+                            const monthEnd = new Date(Date.UTC(nextYear, nextMonth, 1));
 
                             const [dayQ, weekQ, monthQ] = await Promise.all([
                                 supabase.from('fiscalizacion').select('*', { count: 'exact', head: true }).gte('timestamp', iso(dayStart)).lt('timestamp', iso(dayEnd)),
@@ -395,7 +400,9 @@ try {
                             const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow));
                             const weekEnd = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7));
                             const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-                            const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+                            const nextMonth = (now.getUTCMonth() + 1) % 12;
+                            const nextYear = now.getUTCFullYear() + (now.getUTCMonth() === 11 ? 1 : 0);
+                            const monthEnd = new Date(Date.UTC(nextYear, nextMonth, 1));
 
                             const parseTs = (s) => {
                                 if (!s) return null;
